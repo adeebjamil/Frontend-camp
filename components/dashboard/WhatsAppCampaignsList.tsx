@@ -96,15 +96,17 @@ export default function WhatsAppCampaignsList({ campaigns, isLoading, onRefresh 
         return;
       }
       
-      // Call backend API directly
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-      const response = await fetch(`${backendUrl}/api/whatsapp/campaigns/${campaignId}/send`, {
+      // Use the correct API URL
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://backend-camp-rikl.onrender.com/api';
+      
+      // Remove the /api part since it's already included in backendUrl
+      const response = await fetch(`${backendUrl}/whatsapp/campaigns/${campaignId}/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        credentials: 'include' // Include cookies if using them
+        credentials: 'include'
       });
       
       if (!response.ok) {
