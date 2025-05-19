@@ -25,7 +25,7 @@ export async function POST(
     );
     
     // Make a request to your backend API
-    const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:5000';
+    const backendUrl = process.env.BACKEND_API_URL || 'https://backend-camp-rikl.onrender.com';
     const response = await fetch(`${backendUrl}/api/whatsapp/campaigns/${campaignId}/send`, {
       method: 'POST',
       headers: {
