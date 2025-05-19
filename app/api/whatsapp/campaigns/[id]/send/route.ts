@@ -1,6 +1,27 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
+const sendCampaign = async (id: string, token: string) => {
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://backend-camp-rikl.onrender.com/api';
+    const response = await fetch(`${apiUrl}/whatsapp/campaigns/${id}/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to send campaign');
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error sending campaign:", error);
+    throw error;
+  }
+};
+
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }
@@ -24,31 +45,8 @@ export async function POST(
       cookieStore.getAll().map(c => [c.name, c.value])
     );
     
-    // Make a request to your backend API
-    const backendUrl = process.env.BACKEND_API_URL || 'https://backend-camp-rikl.onrender.com';
-    const response = await fetch(`${backendUrl}/api/whatsapp/campaigns/${campaignId}/send`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': authHeader, // Forward the auth header
-        // Add cookies as a Cookie header if needed
-        ...(Object.keys(allCookies).length > 0 
-          ? { Cookie: Object.entries(allCookies)
-              .map(([name, value]) => `${name}=${value}`)
-              .join('; ') 
-            }
-          : {})
-      }
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: data.message || 'Failed to send campaign' },
-        { status: response.status }
-      );
-    }
+    // Call the sendCampaign function
+    const data = await sendCampaign(campaignId, authHeader);
 
     return NextResponse.json(data);
   } catch (error: any) {
