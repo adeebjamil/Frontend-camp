@@ -54,11 +54,14 @@ export default function Login() {
     setIsLoading(true);
     
     try {
-      await login(username, password);
-      toast.success('Login successful');
-      router.push('/dashboard');
+      const success = await login(username, password);
+      if (success) {
+        // Add a small delay to ensure state updates are processed
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 300);
+      }
     } catch (error) {
-      toast.error('Invalid credentials');
       console.error('Login error:', error);
     } finally {
       setIsLoading(false);

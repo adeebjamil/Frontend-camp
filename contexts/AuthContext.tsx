@@ -74,12 +74,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Save token to localStorage
       localStorage.setItem('token', response.data.token);
       
+      // Also save user data to localStorage for persistence
+      localStorage.setItem('userData', JSON.stringify(response.data.user));
+      
       // Update user state
       setUser(response.data.user);
+      
+      // Explicitly set authentication state to true
+      setIsAuthenticated(true);
       
       toast.success(`Welcome back, ${response.data.user.username}! 👋`);
       return true;
     } catch (error: any) {
+      // Error handling logic remains the same
       console.error('Login error:', error);
       
       // Better error messages based on error type
