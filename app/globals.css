@@ -1,0 +1,134 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0f172a;
+  --foreground: #f8fafc;
+  --primary: #22c55e;
+  --primary-dark: #16a34a;
+  --primary-light: #4ade80;
+  --secondary: #1e293b;
+  --accent: #10b981;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #22c55e;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #16a34a;
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+/* Gradient backgrounds */
+.bg-gradient-primary {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+}
+
+.bg-gradient-dark {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+
+.bg-gradient-mesh {
+  background: 
+    radial-gradient(at 40% 20%, rgba(34, 197, 94, 0.15) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, rgba(16, 185, 129, 0.1) 0px, transparent 50%),
+    radial-gradient(at 0% 50%, rgba(34, 197, 94, 0.1) 0px, transparent 50%),
+    radial-gradient(at 80% 50%, rgba(20, 83, 45, 0.15) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(34, 197, 94, 0.1) 0px, transparent 50%),
+    #0f172a;
+}
+
+/* Button styles */
+.btn-primary {
+  @apply bg-primary-500 text-white py-2.5 px-5 rounded-lg hover:bg-primary-600 
+         transition-all duration-300 font-medium shadow-lg shadow-primary-500/25
+         hover:shadow-xl hover:shadow-primary-500/30 disabled:opacity-50 
+         disabled:cursor-not-allowed active:scale-[0.98];
+}
+
+.btn-secondary {
+  @apply bg-dark-800 text-white py-2.5 px-5 rounded-lg hover:bg-dark-700 
+         transition-all duration-300 font-medium border border-dark-600
+         hover:border-primary-500/50 active:scale-[0.98];
+}
+
+.btn-outline {
+  @apply bg-transparent text-primary-400 py-2.5 px-5 rounded-lg 
+         border-2 border-primary-500 hover:bg-primary-500 hover:text-white
+         transition-all duration-300 font-medium active:scale-[0.98];
+}
+
+/* Input styles */
+.input-field {
+  @apply w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg
+         text-white placeholder-dark-400 focus:outline-none focus:border-primary-500
+         focus:ring-2 focus:ring-primary-500/20 transition-all duration-300
+         text-base leading-6;
+}
+
+/* Input with icon - proper alignment */
+.input-icon-left {
+  @apply absolute left-3 top-1/2 -translate-y-1/2 text-dark-400 pointer-events-none;
+}
+
+.input-icon-right {
+  @apply absolute right-3 top-1/2 -translate-y-1/2 text-dark-400;
+}
+
+/* Card styles */
+.card {
+  @apply bg-dark-800/50 backdrop-blur-sm border border-dark-700 rounded-xl 
+         shadow-xl transition-all duration-300;
+}
+
+.card-hover {
+  @apply hover:border-primary-500/30 hover:shadow-2xl hover:shadow-primary-500/5;
+}
+
+/* Glow effects */
+.glow-green {
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.3), 0 0 40px rgba(34, 197, 94, 0.1);
+}
+
+.text-glow {
+  text-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
+}
+
+/* Animated gradient border */
+.gradient-border {
+  position: relative;
+  background: linear-gradient(#0f172a, #0f172a) padding-box,
+              linear-gradient(135deg, #22c55e, #10b981, #22c55e) border-box;
+  border: 2px solid transparent;
+}
+
+/* Loading spinner */
+.spinner {
+  @apply w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin;
+}
