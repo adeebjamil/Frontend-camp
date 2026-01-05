@@ -55,16 +55,16 @@ export default function Home() {
   }, [router]);
   
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-      <div className="flex items-center mb-6">
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-blue-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
+      <div className="flex flex-col sm:flex-row items-center mb-6 gap-3">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
         </svg>
-        <h1 className="text-2xl font-bold text-gray-800">Email Dashboard</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800 text-center">Email Dashboard</h1>
         <ServerStatus />
       </div>
       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      <p className="mt-4 text-gray-600">Redirecting to login...</p>
+      <p className="mt-4 text-gray-600 text-center">Redirecting to login...</p>
     </div>
   );
 }

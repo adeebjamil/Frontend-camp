@@ -90,15 +90,34 @@ body {
          text-white placeholder-dark-400 focus:outline-none focus:border-primary-500
          focus:ring-2 focus:ring-primary-500/20 transition-all duration-300
          text-base leading-6;
+  min-height: 48px;
+  height: 48px;
 }
 
 /* Input with icon - proper alignment */
 .input-icon-left {
-  @apply absolute left-3 top-1/2 -translate-y-1/2 text-dark-400 pointer-events-none;
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  pointer-events: none;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .input-icon-right {
-  @apply absolute right-3 top-1/2 -translate-y-1/2 text-dark-400;
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Card styles */

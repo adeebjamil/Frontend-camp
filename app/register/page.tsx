@@ -1,12 +1,33 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { sendOTP, verifyOTP } from '@/lib/api';
+import { sendOTP, verifyOTP, checkUsername } from '@/lib/api';
 import toast from 'react-hot-toast';
+
+// Password strength checker
+const getPasswordStrength = (password: string): { strength: 'weak' | 'moderate' | 'strong'; score: number; label: string; color: string } => {
+  let score = 0;
+  
+  if (password.length >= 6) score++;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[a-z]/.test(password)) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^a-zA-Z0-9]/.test(password)) score++;
+  
+  if (score <= 2) {
+    return { strength: 'weak', score: 33, label: 'Weak', color: 'bg-red-500' };
+  } else if (score <= 4) {
+    return { strength: 'moderate', score: 66, label: 'Moderate', color: 'bg-yellow-500' };
+  } else {
+    return { strength: 'strong', score: 100, label: 'Strong', color: 'bg-green-500' };
+  }
+};
 
 export default function Register() {
   const [step, setStep] = useState<'form' | 'otp'>('form');
@@ -21,13 +42,19 @@ export default function Register() {
   const [otp, setOtp] = useState(['', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [isSendingOTP, setIsSendingOTP] = useState(false);
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [otpVerified, setOtpVerified] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const usernameCheckTimeout = useRef<NodeJS.Timeout | null>(null);
   const { register, isAuthenticated } = useAuth();
   const router = useRouter();
+
+  // Password strength
+  const passwordStrength = formData.password ? getPasswordStrength(formData.password) : null;
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -42,6 +69,58 @@ export default function Register() {
     }
   }, [resendTimer]);
 
+  // Debounced username check
+  const checkUsernameAvailability = useCallback(async (username: string) => {
+    if (username.length < 3) {
+      setUsernameAvailable(null);
+      return;
+    }
+    
+    setIsCheckingUsername(true);
+    try {
+      const response = await checkUsername(username);
+      setUsernameAvailable(response.data.available);
+      if (!response.data.available) {
+        setErrors(prev => ({ ...prev, username: 'Username already taken' }));
+      } else {
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          if (newErrors.username === 'Username already taken') {
+            delete newErrors.username;
+          }
+          return newErrors;
+        });
+      }
+    } catch (error: any) {
+      setUsernameAvailable(false);
+      setErrors(prev => ({ ...prev, username: error.response?.data?.message || 'Username check failed' }));
+    } finally {
+      setIsCheckingUsername(false);
+    }
+  }, []);
+
+  // Handle username change with debounce
+  const handleUsernameChange = (value: string) => {
+    setFormData(prev => ({ ...prev, username: value }));
+    setUsernameAvailable(null);
+    
+    if (errors.username) {
+      setErrors(prev => ({ ...prev, username: '' }));
+    }
+    
+    // Clear previous timeout
+    if (usernameCheckTimeout.current) {
+      clearTimeout(usernameCheckTimeout.current);
+    }
+    
+    // Set new timeout for debounced check
+    if (value.length >= 3) {
+      usernameCheckTimeout.current = setTimeout(() => {
+        checkUsernameAvailability(value);
+      }, 500);
+    }
+  };
+
   const validateForm = () => {
     const newErrors: { [key: string]: string } = {};
 
@@ -49,6 +128,8 @@ export default function Register() {
       newErrors.username = 'Username is required';
     } else if (formData.username.length < 3) {
       newErrors.username = 'Username must be at least 3 characters';
+    } else if (usernameAvailable === false) {
+      newErrors.username = 'Username already taken';
     }
 
     if (!formData.email.trim()) {
@@ -61,6 +142,8 @@ export default function Register() {
       newErrors.password = 'Password is required';
     } else if (formData.password.length < 6) {
       newErrors.password = 'Password must be at least 6 characters';
+    } else if (passwordStrength && passwordStrength.strength === 'weak') {
+      newErrors.password = 'Password is too weak. Add uppercase, numbers, or symbols';
     }
 
     if (formData.password !== formData.confirmPassword) {
@@ -315,27 +398,31 @@ export default function Register() {
                     <label className="block text-sm font-medium text-dark-300 mb-2">
                       First Name
                     </label>
-                    <input
-                      type="text"
-                      name="firstName"
-                      value={formData.firstName}
-                      onChange={handleChange}
-                      placeholder="John"
-                      className="input-field"
-                    />
+                    <div className="flex items-center gap-3 w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 transition-all duration-300">
+                      <input
+                        type="text"
+                        name="firstName"
+                        value={formData.firstName}
+                        onChange={handleChange}
+                        placeholder="John"
+                        className="flex-1 bg-transparent text-white placeholder-dark-400 focus:outline-none text-base"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-dark-300 mb-2">
                       Last Name
                     </label>
-                    <input
-                      type="text"
-                      name="lastName"
-                      value={formData.lastName}
-                      onChange={handleChange}
-                      placeholder="Doe"
-                      className="input-field"
-                    />
+                    <div className="flex items-center gap-3 w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 transition-all duration-300">
+                      <input
+                        type="text"
+                        name="lastName"
+                        value={formData.lastName}
+                        onChange={handleChange}
+                        placeholder="Doe"
+                        className="flex-1 bg-transparent text-white placeholder-dark-400 focus:outline-none text-base"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -343,19 +430,31 @@ export default function Register() {
                 <div>
                   <label className="block text-sm font-medium text-dark-300 mb-2">
                     Username <span className="text-red-400">*</span>
+                    {isCheckingUsername && (
+                      <span className="ml-2 text-dark-400 text-xs">Checking...</span>
+                    )}
+                    {!isCheckingUsername && usernameAvailable === true && (
+                      <span className="ml-2 text-primary-400 text-xs">✓ Available</span>
+                    )}
+                    {!isCheckingUsername && usernameAvailable === false && (
+                      <span className="ml-2 text-red-400 text-xs">✗ Taken</span>
+                    )}
                   </label>
-                  <div className="relative">
-                    <svg className="input-icon-left w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className={`flex items-center gap-3 w-full px-4 py-3 bg-dark-800 border rounded-lg focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 transition-all duration-300 ${errors.username ? 'border-red-500' : usernameAvailable === true ? 'border-primary-500' : 'border-dark-600'}`}>
+                    <svg className="w-5 h-5 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                     <input
                       type="text"
                       name="username"
                       value={formData.username}
-                      onChange={handleChange}
+                      onChange={(e) => handleUsernameChange(e.target.value)}
                       placeholder="Choose a username"
-                      className={`input-field pl-11 ${errors.username ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                      className="flex-1 bg-transparent text-white placeholder-dark-400 focus:outline-none text-base"
                     />
+                    {isCheckingUsername && (
+                      <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                    )}
                   </div>
                   {errors.username && <p className="mt-1 text-sm text-red-400">{errors.username}</p>}
                 </div>
@@ -368,9 +467,9 @@ export default function Register() {
                       <span className="ml-2 text-primary-400 text-xs">✓ Verified</span>
                     )}
                   </label>
-                  <div className="relative flex gap-2">
-                    <div className="relative flex-1">
-                      <svg className="input-icon-left w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="flex gap-2">
+                    <div className={`flex items-center gap-3 flex-1 px-4 py-3 bg-dark-800 border rounded-lg focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 transition-all duration-300 ${errors.email ? 'border-red-500' : 'border-dark-600'} ${otpVerified ? 'opacity-75' : ''}`}>
+                      <svg className="w-5 h-5 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                       </svg>
                       <input
@@ -383,7 +482,7 @@ export default function Register() {
                         }}
                         placeholder="you@example.com"
                         disabled={otpVerified}
-                        className={`input-field pl-11 ${errors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''} ${otpVerified ? 'bg-dark-700 opacity-75' : ''}`}
+                        className="flex-1 bg-transparent text-white placeholder-dark-400 focus:outline-none text-base disabled:cursor-not-allowed"
                       />
                     </div>
                     {!otpVerified && (
@@ -410,9 +509,17 @@ export default function Register() {
                 <div>
                   <label className="block text-sm font-medium text-dark-300 mb-2">
                     Password <span className="text-red-400">*</span>
+                    {passwordStrength && (
+                      <span className={`ml-2 text-xs ${
+                        passwordStrength.strength === 'weak' ? 'text-red-400' : 
+                        passwordStrength.strength === 'moderate' ? 'text-yellow-400' : 'text-green-400'
+                      }`}>
+                        {passwordStrength.label}
+                      </span>
+                    )}
                   </label>
-                  <div className="relative">
-                    <svg className="input-icon-left w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className={`flex items-center gap-3 w-full px-4 py-3 bg-dark-800 border rounded-lg focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 transition-all duration-300 ${errors.password ? 'border-red-500' : 'border-dark-600'}`}>
+                    <svg className="w-5 h-5 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                     <input
@@ -421,12 +528,12 @@ export default function Register() {
                       value={formData.password}
                       onChange={handleChange}
                       placeholder="Min. 6 characters"
-                      className={`input-field pl-11 pr-11 ${errors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                      className="flex-1 bg-transparent text-white placeholder-dark-400 focus:outline-none text-base"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="input-icon-right hover:text-primary-400 transition-colors cursor-pointer"
+                      className="text-slate-400 hover:text-primary-400 transition-colors flex-shrink-0"
                     >
                       {showPassword ? (
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -440,6 +547,22 @@ export default function Register() {
                       )}
                     </button>
                   </div>
+                  {/* Password Strength Bar */}
+                  {formData.password && passwordStrength && (
+                    <div className="mt-2">
+                      <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-300 ${passwordStrength.color}`}
+                          style={{ width: `${passwordStrength.score}%` }}
+                        />
+                      </div>
+                      <p className="mt-1 text-xs text-dark-400">
+                        {passwordStrength.strength === 'weak' && 'Add uppercase, numbers, or symbols for a stronger password'}
+                        {passwordStrength.strength === 'moderate' && 'Good! Add more variety for maximum security'}
+                        {passwordStrength.strength === 'strong' && 'Excellent! Your password is strong'}
+                      </p>
+                    </div>
+                  )}
                   {errors.password && <p className="mt-1 text-sm text-red-400">{errors.password}</p>}
                 </div>
 
@@ -448,8 +571,8 @@ export default function Register() {
                   <label className="block text-sm font-medium text-dark-300 mb-2">
                     Confirm Password <span className="text-red-400">*</span>
                   </label>
-                  <div className="relative">
-                    <svg className="input-icon-left w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className={`flex items-center gap-3 w-full px-4 py-3 bg-dark-800 border rounded-lg focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/20 transition-all duration-300 ${errors.confirmPassword ? 'border-red-500' : 'border-dark-600'}`}>
+                    <svg className="w-5 h-5 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
                     <input
@@ -458,7 +581,7 @@ export default function Register() {
                       value={formData.confirmPassword}
                       onChange={handleChange}
                       placeholder="Confirm your password"
-                      className={`input-field pl-11 ${errors.confirmPassword ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                      className="flex-1 bg-transparent text-white placeholder-dark-400 focus:outline-none text-base"
                     />
                   </div>
                   {errors.confirmPassword && <p className="mt-1 text-sm text-red-400">{errors.confirmPassword}</p>}

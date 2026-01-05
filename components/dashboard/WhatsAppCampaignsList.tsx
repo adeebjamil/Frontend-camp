@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSearch, FiRefreshCw, FiSend, FiMessageCircle, FiChevronLeft, FiChevronRight, FiInbox, FiClock, FiCheckCircle, FiXCircle, FiLoader } from 'react-icons/fi';
+import { FiSearch, FiRefreshCw, FiSend, FiMessageCircle, FiChevronLeft, FiChevronRight, FiInbox, FiClock, FiCheckCircle, FiXCircle, FiLoader, FiEye, FiRotateCcw, FiCalendar, FiX, FiTrash2 } from 'react-icons/fi';
+import { getDeliveryReport, retryFailedMessages, cancelScheduledCampaign, deleteWhatsAppCampaign, DeliveryReport, RecipientStatus } from '../../lib/api';
+import toast from 'react-hot-toast';
 
 interface Campaign {
   _id: string;
@@ -10,8 +12,11 @@ interface Campaign {
   provider: string;
   status: string;
   sentCount: number;
+  failedCount?: number;
   totalRecipients: number;
   createdAt: string;
+  scheduledAt?: string;
+  isScheduled?: boolean;
 }
 
 interface WhatsAppCampaignsListProps {
@@ -25,6 +30,14 @@ export default function WhatsAppCampaignsList({ campaigns, onRefresh, isLoading 
   const [filteredCampaigns, setFilteredCampaigns] = useState<Campaign[]>(campaigns);
   const [currentPage, setCurrentPage] = useState(1);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  
+  // Delivery Report Modal
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<DeliveryReport | null>(null);
+  const [loadingReport, setLoadingReport] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   
   const itemsPerPage = 10;
   const totalPages = Math.max(1, Math.ceil(filteredCampaigns.length / itemsPerPage));
@@ -84,6 +97,20 @@ export default function WhatsAppCampaignsList({ campaigns, onRefresh, isLoading 
           border: 'border-amber-500/30',
           icon: FiClock 
         };
+      case 'scheduled':
+        return { 
+          bg: 'bg-purple-500/20', 
+          text: 'text-purple-400', 
+          border: 'border-purple-500/30',
+          icon: FiCalendar 
+        };
+      case 'cancelled':
+        return { 
+          bg: 'bg-slate-500/20', 
+          text: 'text-slate-400', 
+          border: 'border-slate-500/30',
+          icon: FiX 
+        };
       case 'failed':
         return { 
           bg: 'bg-red-500/20', 
@@ -98,6 +125,69 @@ export default function WhatsAppCampaignsList({ campaigns, onRefresh, isLoading 
           border: 'border-slate-500/30',
           icon: FiMessageCircle 
         };
+    }
+  };
+  
+  // View delivery report
+  const handleViewReport = async (campaignId: string) => {
+    setLoadingReport(true);
+    try {
+      const response = await getDeliveryReport(campaignId);
+      setSelectedReport(response.data);
+      setShowReportModal(true);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to load delivery report');
+    } finally {
+      setLoadingReport(false);
+    }
+  };
+  
+  // Retry failed messages
+  const handleRetry = async (campaignId: string) => {
+    setRetryingId(campaignId);
+    try {
+      const response = await retryFailedMessages(campaignId);
+      toast.success(response.data.message);
+      onRefresh?.();
+      if (showReportModal && selectedReport?.campaignId === campaignId) {
+        handleViewReport(campaignId); // Refresh the report
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to retry messages');
+    } finally {
+      setRetryingId(null);
+    }
+  };
+  
+  // Cancel scheduled campaign
+  const handleCancelScheduled = async (campaignId: string) => {
+    setCancellingId(campaignId);
+    try {
+      await cancelScheduledCampaign(campaignId);
+      toast.success('Scheduled campaign cancelled and deleted');
+      onRefresh?.();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to cancel campaign');
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  // Delete campaign
+  const handleDeleteCampaign = async (campaignId: string) => {
+    if (!confirm('Are you sure you want to delete this campaign? This action cannot be undone.')) {
+      return;
+    }
+    
+    setDeletingId(campaignId);
+    try {
+      await deleteWhatsAppCampaign(campaignId);
+      toast.success('Campaign deleted successfully');
+      onRefresh?.();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to delete campaign');
+    } finally {
+      setDeletingId(null);
     }
   };
   
@@ -253,7 +343,12 @@ export default function WhatsAppCampaignsList({ campaigns, onRefresh, isLoading 
                           </div>
                           <span className="text-xs text-slate-400 whitespace-nowrap">
                             {campaign.sentCount}/{campaign.totalRecipients}
+                            {campaign.failedCount ? ` (${campaign.failedCount} failed)` : ''}
                           </span>
+                        </div>
+                        
+                        {/* Action Buttons - Mobile */}
+                        <div className="flex items-center gap-2 flex-wrap">
                           {campaign.status === 'pending' && (
                             <motion.button
                               whileHover={{ scale: 1.05 }}
@@ -269,6 +364,82 @@ export default function WhatsAppCampaignsList({ campaigns, onRefresh, isLoading 
                               )}
                               Send
                             </motion.button>
+                          )}
+                          {campaign.status === 'scheduled' && (
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleCancelScheduled(campaign._id)}
+                              disabled={cancellingId === campaign._id}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
+                            >
+                              {cancellingId === campaign._id ? (
+                                <FiLoader className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <FiX className="w-3 h-3" />
+                              )}
+                              Cancel
+                            </motion.button>
+                          )}
+                          {campaign.status === 'cancelled' && (
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleDeleteCampaign(campaign._id)}
+                              disabled={deletingId === campaign._id}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
+                            >
+                              {deletingId === campaign._id ? (
+                                <FiLoader className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <FiTrash2 className="w-3 h-3" />
+                              )}
+                              Delete
+                            </motion.button>
+                          )}
+                          {(campaign.status === 'completed' || campaign.status === 'failed') && (
+                            <>
+                              <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleViewReport(campaign._id)}
+                                disabled={loadingReport}
+                                className="flex items-center gap-1 px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-md text-xs font-medium transition-colors"
+                              >
+                                <FiEye className="w-3 h-3" />
+                                Report
+                              </motion.button>
+                              {campaign.failedCount && campaign.failedCount > 0 && (
+                                <motion.button
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => handleRetry(campaign._id)}
+                                  disabled={retryingId === campaign._id}
+                                  className="flex items-center gap-1 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
+                                >
+                                  {retryingId === campaign._id ? (
+                                    <FiLoader className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <FiRotateCcw className="w-3 h-3" />
+                                  )}
+                                  Retry
+                                </motion.button>
+                              )}
+                              <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleDeleteCampaign(campaign._id)}
+                                disabled={deletingId === campaign._id}
+                                className="flex items-center gap-1 px-2.5 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
+                              >
+                                {deletingId === campaign._id ? (
+                                  <FiLoader className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <FiTrash2 className="w-3 h-3" />
+                                )}
+                                Delete
+                              </motion.button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -287,7 +458,7 @@ export default function WhatsAppCampaignsList({ campaigns, onRefresh, isLoading 
                           </span>
                         </div>
                         <div className="px-6 py-4 col-span-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full border ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border}`}>
                               <StatusIcon className={`w-3 h-3 ${campaign.status === 'in-progress' || campaign.status === 'sending' ? 'animate-spin' : ''}`} />
                               {campaign.status}
@@ -307,6 +478,77 @@ export default function WhatsAppCampaignsList({ campaigns, onRefresh, isLoading 
                                 )}
                                 Send
                               </motion.button>
+                            )}
+                            {campaign.status === 'scheduled' && (
+                              <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleCancelScheduled(campaign._id)}
+                                disabled={cancellingId === campaign._id}
+                                className="flex items-center gap-1 px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
+                              >
+                                {cancellingId === campaign._id ? (
+                                  <FiLoader className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <FiX className="w-3 h-3" />
+                                )}
+                                Cancel
+                              </motion.button>
+                            )}
+                            {campaign.status === 'cancelled' && (
+                              <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleDeleteCampaign(campaign._id)}
+                                disabled={deletingId === campaign._id}
+                                className="flex items-center gap-1 px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
+                              >
+                                {deletingId === campaign._id ? (
+                                  <FiLoader className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <FiTrash2 className="w-3 h-3" />
+                                )}
+                              </motion.button>
+                            )}
+                            {(campaign.status === 'completed' || campaign.status === 'failed') && (
+                              <>
+                                <motion.button
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => handleViewReport(campaign._id)}
+                                  className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-md text-xs font-medium transition-colors"
+                                >
+                                  <FiEye className="w-3 h-3" />
+                                </motion.button>
+                                {campaign.failedCount && campaign.failedCount > 0 && (
+                                  <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => handleRetry(campaign._id)}
+                                    disabled={retryingId === campaign._id}
+                                    className="flex items-center gap-1 px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
+                                  >
+                                    {retryingId === campaign._id ? (
+                                      <FiLoader className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <FiRotateCcw className="w-3 h-3" />
+                                    )}
+                                  </motion.button>
+                                )}
+                                <motion.button
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => handleDeleteCampaign(campaign._id)}
+                                  disabled={deletingId === campaign._id}
+                                  className="flex items-center gap-1 px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
+                                >
+                                  {deletingId === campaign._id ? (
+                                    <FiLoader className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <FiTrash2 className="w-3 h-3" />
+                                  )}
+                                </motion.button>
+                              </>
                             )}
                           </div>
                         </div>
@@ -397,6 +639,143 @@ export default function WhatsAppCampaignsList({ campaigns, onRefresh, isLoading 
           )}
         </>
       )}
+      
+      {/* Delivery Report Modal */}
+      <AnimatePresence>
+        {showReportModal && selectedReport && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowReportModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-slate-800 rounded-2xl p-6 w-full max-w-2xl border border-slate-700 max-h-[85vh] overflow-hidden flex flex-col"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Delivery Report</h3>
+                  <p className="text-sm text-slate-400">{selectedReport.subject}</p>
+                </div>
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="p-2 rounded-lg hover:bg-slate-700 transition-colors"
+                >
+                  <FiX className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+              
+              {/* Stats Overview */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-slate-700/50 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-bold text-white">{selectedReport.stats.total}</p>
+                  <p className="text-xs text-slate-400">Total</p>
+                </div>
+                <div className="bg-emerald-500/20 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-bold text-emerald-400">{selectedReport.stats.sent}</p>
+                  <p className="text-xs text-slate-400">Sent</p>
+                </div>
+                <div className="bg-blue-500/20 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-bold text-blue-400">{selectedReport.stats.delivered}</p>
+                  <p className="text-xs text-slate-400">Delivered</p>
+                </div>
+                <div className="bg-red-500/20 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-bold text-red-400">{selectedReport.stats.failed}</p>
+                  <p className="text-xs text-slate-400">Failed</p>
+                </div>
+              </div>
+              
+              {/* Failed Errors Summary */}
+              {Object.keys(selectedReport.failedByError).length > 0 && (
+                <div className="mb-4 p-4 bg-red-500/10 rounded-xl border border-red-500/20">
+                  <h4 className="text-sm font-medium text-red-400 mb-2">Failure Reasons</h4>
+                  <div className="space-y-1">
+                    {Object.entries(selectedReport.failedByError).map(([error, count]) => (
+                      <div key={error} className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400 truncate flex-1">{error}</span>
+                        <span className="text-red-400 ml-2">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Recipients List */}
+              <div className="flex-1 overflow-y-auto">
+                <h4 className="text-sm font-medium text-slate-300 mb-3">Recipients</h4>
+                <div className="space-y-2">
+                  {selectedReport.recipients.map((recipient, idx) => {
+                    const statusColors = {
+                      pending: 'bg-amber-500/20 text-amber-400',
+                      sent: 'bg-blue-500/20 text-blue-400',
+                      delivered: 'bg-emerald-500/20 text-emerald-400',
+                      failed: 'bg-red-500/20 text-red-400'
+                    };
+                    return (
+                      <div 
+                        key={idx}
+                        className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs text-slate-400">
+                            {recipient.name ? recipient.name[0].toUpperCase() : '#'}
+                          </div>
+                          <div>
+                            <p className="text-sm text-white">{recipient.name || recipient.phone}</p>
+                            <p className="text-xs text-slate-500">{recipient.phone}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded-full text-xs ${statusColors[recipient.status]}`}>
+                            {recipient.status}
+                          </span>
+                          {recipient.retryCount && recipient.retryCount > 0 && (
+                            <span className="text-xs text-slate-500">
+                              {recipient.retryCount} retries
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              {/* Footer Actions */}
+              <div className="flex justify-between items-center mt-6 pt-4 border-t border-slate-700">
+                {selectedReport.stats.failed > 0 && (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handleRetry(selectedReport.campaignId)}
+                    disabled={retryingId === selectedReport.campaignId}
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {retryingId === selectedReport.campaignId ? (
+                      <FiLoader className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <FiRotateCcw className="w-4 h-4" />
+                    )}
+                    Retry {selectedReport.stats.failed} Failed
+                  </motion.button>
+                )}
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="px-4 py-2 text-slate-400 hover:text-white transition-colors ml-auto"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

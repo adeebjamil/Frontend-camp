@@ -10,6 +10,7 @@ import WhatsAppCampaignsList from '../../components/dashboard/WhatsAppCampaignsL
 import Sidebar from '../../components/dashboard/Sidebar';
 import WhatsAppQRCode from '../../components/dashboard/WhatsAppQRCode';
 import Settings from '../../components/dashboard/Settings';
+import NotificationCenter from '../../components/dashboard/NotificationCenter';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -114,7 +115,7 @@ export default function Dashboard() {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       
       {/* Main content area */}
-      <div className="ml-[280px] min-h-screen bg-dark-950">
+      <div className="lg:ml-[280px] min-h-screen bg-dark-950">
         {/* Background decoration */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-40 -right-40 w-96 h-96 bg-primary-500/5 rounded-full blur-3xl" />
@@ -125,13 +126,13 @@ export default function Dashboard() {
         <motion.header 
           initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="sticky top-0 z-30 h-[73px] bg-dark-900/95 backdrop-blur-xl border-b border-dark-700 px-8 flex items-center"
+          className="sticky top-0 z-30 h-[73px] bg-dark-900/95 backdrop-blur-xl border-b border-dark-700 px-4 sm:px-6 lg:px-8 flex items-center"
         >
           <div className="flex justify-between items-center w-full">
-            {/* Page Title */}
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold text-white truncate">{pageInfo.title}</h1>
-              <p className="text-dark-400 text-sm mt-0.5 truncate">{pageInfo.subtitle}</p>
+            {/* Page Title - with left padding on mobile for hamburger menu */}
+            <div className="min-w-0 pl-12 lg:pl-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-white truncate">{pageInfo.title}</h1>
+              <p className="text-dark-400 text-xs sm:text-sm mt-0.5 truncate">{pageInfo.subtitle}</p>
             </div>
             
             {/* Right Section - pushed to far right */}
@@ -163,6 +164,9 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* Notification Bell */}
+              <NotificationCenter />
+
               {/* User profile */}
               <div className="flex items-center gap-2.5 pl-2 border-l border-dark-700">
                 <div className="text-right hidden sm:block">
@@ -188,7 +192,7 @@ export default function Dashboard() {
         </motion.header>
         
         {/* Content */}
-        <div className="relative p-6 md:p-8">
+        <div className="relative p-4 sm:p-6 lg:p-8">
           <AnimatePresence mode="wait">
             <motion.div 
               key={activeTab}

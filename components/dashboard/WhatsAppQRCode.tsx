@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
-import { FiCheckCircle, FiWifi, FiWifiOff, FiRefreshCw, FiSmartphone, FiAlertCircle, FiZap, FiLoader } from 'react-icons/fi';
-import { initWhatsAppConnection, getWhatsAppStatus } from '@/lib/api';
+import { FiCheckCircle, FiWifi, FiWifiOff, FiRefreshCw, FiSmartphone, FiAlertCircle, FiZap, FiLoader, FiPower } from 'react-icons/fi';
+import { initWhatsAppConnection, getWhatsAppStatus, disconnectWhatsApp } from '@/lib/api';
 
 interface WhatsAppQRCodeProps {
   onConnectionChange?: (connected: boolean) => void;
@@ -18,8 +18,8 @@ export default function WhatsAppQRCode({ onConnectionChange }: WhatsAppQRCodePro
   const [scanning, setScanning] = useState(false);
   const [scanTimeout, setScanTimeout] = useState<NodeJS.Timeout | null>(null);
   const [attemptCount, setAttemptCount] = useState(0);
-  const [pollingActive, setPollingActive] = useState(false);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [connectedDevice, setConnectedDevice] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -31,6 +31,9 @@ export default function WhatsAppQRCode({ onConnectionChange }: WhatsAppQRCodePro
         setQrCodeData(null);
         setError(null);
         setScanning(false);
+        if (response.data.userInfo) {
+          setConnectedDevice(response.data.userInfo);
+        }
         if (scanTimeout) {
           clearTimeout(scanTimeout);
           setScanTimeout(null);
@@ -90,58 +93,62 @@ export default function WhatsAppQRCode({ onConnectionChange }: WhatsAppQRCodePro
     setError(null);
     setQrCodeData(null);
     setAttemptCount(0);
-    setPollingActive(true);
     
     try {
       await initWhatsAppConnection();
-      pollForQrCode();
+      // Start polling directly after init
+      startPolling();
     } catch (err) {
       console.error('Failed to initialize WhatsApp connection:', err);
       setError('Failed to connect to WhatsApp');
       setLoading(false);
-      setPollingActive(false);
     }
   };
-  
-  const pollForQrCode = useCallback(async () => {
-    if (!pollingActive) return;
+
+  const startPolling = () => {
+    let attempts = 0;
+    const maxAttempts = 20;
     
-    try {
-      const response = await getWhatsAppStatus();
-      
-      if (response.data.qrCode) {
-        setQrCodeData(response.data.qrCode);
-        setStatus('authenticating');
-        setLoading(false);
-        setPollingActive(false);
-        setError(null);
-        return;
-      } else if (response.data.connected) {
-        setStatus('connected');
-        setLoading(false);
-        setPollingActive(false);
-        return;
-      }
-      
-      setAttemptCount(prev => {
-        const newCount = prev + 1;
-        if (newCount >= 15) {
-          setPollingActive(false);
-          setError("No QR code was generated after multiple attempts. Please check server logs and try again.");
+    const poll = async () => {
+      try {
+        const response = await getWhatsAppStatus();
+        console.log('Poll response:', response.data);
+        
+        if (response.data.qrCode) {
+          console.log('QR Code received! Length:', response.data.qrCode.length);
+          setQrCodeData(response.data.qrCode);
+          setStatus('authenticating');
           setLoading(false);
-          return newCount;
+          setError(null);
+          return; // Stop polling
+        } else if (response.data.connected) {
+          setStatus('connected');
+          setLoading(false);
+          return; // Stop polling
         }
         
-        setTimeout(pollForQrCode, 2000);
-        return newCount;
-      });
-    } catch (err) {
-      console.error("Error checking for QR code:", err);
-      setPollingActive(false);
-      setError("Error getting QR code from server");
-      setLoading(false);
-    }
-  }, [attemptCount, pollingActive]);
+        attempts++;
+        setAttemptCount(attempts);
+        console.log(`Polling attempt ${attempts}/${maxAttempts}, authenticating: ${response.data.authenticating}`);
+        
+        if (attempts >= maxAttempts) {
+          setError("No QR code was generated after multiple attempts. Please check if backend is running.");
+          setLoading(false);
+          return;
+        }
+        
+        // Continue polling
+        setTimeout(poll, 2000);
+      } catch (err) {
+        console.error("Error checking for QR code:", err);
+        setError("Error getting QR code from server");
+        setLoading(false);
+      }
+    };
+    
+    // Start first poll after a short delay to let backend initialize
+    setTimeout(poll, 1000);
+  };
   
   const forceReconnect = async () => {
     setScanning(false);
@@ -158,13 +165,13 @@ export default function WhatsAppQRCode({ onConnectionChange }: WhatsAppQRCodePro
     const interval = setInterval(() => {
       if (scanning) {
         fetchStatus();
-      } else if (!pollingActive) {
+      } else {
         fetchStatus();
       }
     }, scanning ? 2000 : 10000);
     
     return () => clearInterval(interval);
-  }, [fetchStatus, pollingActive, scanning]);
+  }, [fetchStatus, scanning]);
 
   useEffect(() => {
     return () => {
@@ -178,7 +185,7 @@ export default function WhatsAppQRCode({ onConnectionChange }: WhatsAppQRCodePro
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="card p-8"
+      className="card p-4 sm:p-6 lg:p-8"
     >
       <div className="flex items-center gap-3 mb-6">
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
@@ -200,7 +207,7 @@ export default function WhatsAppQRCode({ onConnectionChange }: WhatsAppQRCodePro
             <div className="absolute inset-0 w-16 h-16 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></div>
           </div>
           <p className="mt-6 text-slate-400">
-            {pollingActive ? `Checking for QR code (Attempt ${attemptCount}/15)...` : 'Initializing...'}
+            {attemptCount > 0 ? `Checking for QR code (Attempt ${attemptCount}/20)...` : 'Initializing...'}
           </p>
         </div>
       ) : error ? (
@@ -298,17 +305,48 @@ export default function WhatsAppQRCode({ onConnectionChange }: WhatsAppQRCodePro
                   <FiCheckCircle className="w-10 h-10 text-emerald-400" />
                 </div>
                 <p className="text-lg text-white font-medium mb-2">WhatsApp Connected!</p>
+                {connectedDevice && (
+                  <div className="flex items-center justify-center gap-2 mb-4 px-4 py-2 bg-slate-800/50 rounded-lg border border-slate-700 mx-auto w-fit">
+                    <FiSmartphone className="w-4 h-4 text-emerald-400" />
+                    <span className="text-slate-300">+{connectedDevice.split(':')[0]}</span>
+                  </div>
+                )}
                 <p className="text-slate-400 mb-8">Ready to send messages</p>
                 
-                <motion.button 
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="px-6 py-2.5 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-2 mx-auto"
-                  onClick={() => initConnection()}
-                >
-                  <FiRefreshCw className="w-4 h-4" />
-                  Disconnect & Reconnect
-                </motion.button>
+                <div className="flex flex-col sm:flex-row justify-center gap-3">
+                  <motion.button 
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="px-6 py-2.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors flex items-center gap-2 justify-center"
+                    onClick={async () => {
+                      setLoading(true);
+                      try {
+                        await disconnectWhatsApp();
+                        setStatus('disconnected');
+                        setConnectedDevice(null);
+                        setConnectionAttempts(0);
+                        if (onConnectionChange) onConnectionChange(false);
+                      } catch (err) {
+                        console.error('Failed to disconnect:', err);
+                        setError('Failed to disconnect');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                  >
+                    <FiPower className="w-4 h-4" />
+                    Disconnect
+                  </motion.button>
+                  <motion.button 
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="px-6 py-2.5 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-2 justify-center"
+                    onClick={() => initConnection()}
+                  >
+                    <FiRefreshCw className="w-4 h-4" />
+                    Reconnect
+                  </motion.button>
+                </div>
               </motion.div>
             ) : qrCodeData ? (
               <motion.div
@@ -320,21 +358,22 @@ export default function WhatsAppQRCode({ onConnectionChange }: WhatsAppQRCodePro
               >
                 <p className="text-slate-400 mb-6">Scan this QR code with your WhatsApp mobile app</p>
                 
-                <div className="inline-block p-6 bg-white rounded-2xl shadow-xl shadow-black/20 mb-6">
+                <div className="inline-block p-4 sm:p-6 bg-white rounded-2xl shadow-xl shadow-black/20 mb-6">
                   <QRCodeSVG 
                     value={qrCodeData}
-                    size={240}
+                    size={200}
                     level="H"
                     includeMargin={false}
+                    className="w-48 h-48 sm:w-60 sm:h-60"
                   />
                 </div>
                 
-                <div className="flex items-center justify-center gap-2 text-sm text-slate-500 mb-6">
-                  <FiSmartphone className="w-4 h-4" />
-                  <span>WhatsApp → Menu → Linked devices → Link a device</span>
+                <div className="flex items-center justify-center gap-2 text-xs sm:text-sm text-slate-500 mb-6 px-2">
+                  <FiSmartphone className="w-4 h-4 flex-shrink-0" />
+                  <span className="text-center">WhatsApp → Menu → Linked devices → Link a device</span>
                 </div>
                 
-                <div className="flex justify-center gap-3">
+                <div className="flex flex-col sm:flex-row justify-center gap-3">
                   <motion.button 
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}

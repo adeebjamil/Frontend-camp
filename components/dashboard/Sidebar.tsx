@@ -1,7 +1,10 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FiMenu, FiX } from 'react-icons/fi';
 
 interface SidebarProps {
   activeTab: string;
@@ -11,6 +14,41 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Check if mobile on mount and window resize
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024);
+      if (window.innerWidth >= 1024) {
+        setIsMobileOpen(false);
+      }
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Close sidebar when tab changes on mobile
+  useEffect(() => {
+    if (isMobile) {
+      setIsMobileOpen(false);
+    }
+  }, [activeTab, isMobile]);
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (isMobileOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isMobileOpen]);
 
   const handleLogout = async () => {
     try {
@@ -118,14 +156,10 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
     return `${baseClasses} text-dark-300 hover:bg-dark-700/50 hover:text-white`;
   };
 
-  return (
-    <motion.div 
-      initial={{ x: -20, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      className="fixed top-0 left-0 bg-dark-900 border-r border-dark-700 text-white h-screen w-[280px] flex flex-col z-40"
-    >
+  const SidebarContent = () => (
+    <>
       {/* Logo */}
-      <div className="h-[73px] px-5 border-b border-dark-700 flex items-center">
+      <div className="h-[73px] px-5 border-b border-dark-700 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-lg shadow-primary-500/25">
             <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -137,6 +171,15 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
             <p className="text-xs text-dark-400">Marketing Platform</p>
           </div>
         </div>
+        {/* Close button for mobile */}
+        {isMobile && (
+          <button
+            onClick={() => setIsMobileOpen(false)}
+            className="p-2 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors lg:hidden"
+          >
+            <FiX className="w-5 h-5" />
+          </button>
+        )}
       </div>
       
       {/* User Profile */}
@@ -227,7 +270,56 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
           <span className="font-medium group-hover:text-red-300">Logout</span>
         </motion.button>
       </div>
-    </motion.div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile Menu Button - Fixed at top */}
+      <button
+        onClick={() => setIsMobileOpen(true)}
+        className="fixed top-4 left-4 z-50 p-2.5 rounded-xl bg-dark-800 border border-dark-700 text-white shadow-lg lg:hidden"
+      >
+        <FiMenu className="w-6 h-6" />
+      </button>
+
+      {/* Mobile Overlay */}
+      <AnimatePresence>
+        {isMobileOpen && isMobile && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsMobileOpen(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Desktop Sidebar */}
+      <motion.div 
+        initial={{ x: -20, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        className="hidden lg:flex fixed top-0 left-0 bg-dark-900 border-r border-dark-700 text-white h-screen w-[280px] flex-col z-40"
+      >
+        <SidebarContent />
+      </motion.div>
+
+      {/* Mobile Sidebar */}
+      <AnimatePresence>
+        {isMobileOpen && (
+          <motion.div
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed top-0 left-0 bg-dark-900 border-r border-dark-700 text-white h-screen w-[280px] flex flex-col z-50 lg:hidden"
+          >
+            <SidebarContent />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 };
 
